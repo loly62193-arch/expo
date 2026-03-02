@@ -1,161 +1,642 @@
----
-title: EAS Build
-sidebar_title: Introduction
-description: EAS Build is a hosted service for building app binaries for your Expo and React Native projects.
----
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  Dimensions,
+  TextInput,
+  ScrollView,
+  Modal
+} from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
+import { createDrawerNavigator } from '@react-navigation/drawer';
+import Icon from 'react-native-vector-icons/MaterialIcons';
+import * as Clipboard from 'expo-clipboard';
 
-import { Cube01Icon } from '@expo/styleguide-icons/outline/Cube01Icon';
+const { width, height } = Dimensions.get('window');
+const Stack = createStackNavigator();
+const Drawer = createDrawerNavigator();
 
-import { BoxLink } from '~/ui/components/BoxLink';
-import { Collapsible } from '~/ui/components/Collapsible';
-import { NoIcon, YesIcon } from '~/ui/components/DocIcons';
-import { FAQ } from '~/ui/components/FAQ';
-import { Terminal } from '~/ui/components/Snippet';
+// مكون لعبة السلوتس
+const SlotMachine = ({ result, isSpinning }) => {
+  return (
+    <View style={slotStyles.container}>
+      <View style={slotStyles.slotContainer}>
+        {result.map((symbol, index) => (
+          <View key={index} style={[slotStyles.reel, isSpinning && slotStyles.spinning]}>
+            <Text style={slotStyles.symbol}>{symbol}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+};
 
-**EAS Build** is a hosted Expo Application Services (EAS) service that builds app binaries (also called [standalone apps](/more/glossary-of-terms/#standalone-app)) for your Expo and React Native projects.
+const slotStyles = StyleSheet.create({
+  container: { justifyContent: 'center', alignItems: 'center' },
+  slotContainer: { flexDirection: 'row', backgroundColor: '#333', padding: 20, borderRadius: 20, borderWidth: 5, borderColor: '#FFD700' },
+  reel: { width: 80, height: 120, backgroundColor: '#fff', marginHorizontal: 8, borderRadius: 10, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: '#FFD700' },
+  spinning: { opacity: 0.7 },
+  symbol: { fontSize: 60 }
+});
 
-EAS Build makes building your apps for distribution simple and easy to automate by providing defaults that work well for Expo and React Native projects out of the box, and by handling your app signing credentials for you (if you wish). It also makes sharing builds with your team easier than ever with [internal distribution](/build/internal-distribution/) (using [ad hoc](/build/internal-distribution/) and/or enterprise "universal" provisioning), deeply integrates with EAS Submit for app store submissions, and has first-class support for the [`expo-updates`](/build/updates/) library.
+// شاشة تسجيل الدخول
+const LoginScreen = ({ navigation }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
-EAS Build is also designed to work for any native project, whether or not you use Expo and React Native. It's the fastest way to get from `npx create-expo-app` or `npx @react-native-community/cli@latest init` to app stores.
+  const handleLogin = async () => {
+    if (!email || !password) {
+      Alert.alert('خطأ', 'الرجاء إدخال البريد وكلمة المرور');
+      return;
+    }
 
-## Quick start
+    // تسجيل الدخول (محاكاة)
+    await AsyncStorage.setItem('access_token', 'token123');
+    await AsyncStorage.setItem('user_data', JSON.stringify({
+      id: 1,
+      email,
+      coinBalance: 1000,
+      username: email.split('@')[0]
+    }));
+    
+    navigation.replace('Main');
+  };
 
-> **info** The `eas` commands below require EAS CLI. See [How to install EAS CLI](/eas/cli/#installation) for more information.
+  return (
+    <View style={loginStyles.container}>
+      <Text style={loginStyles.title}>🎰 سلوتس كلاسيك</Text>
+      <Text style={loginStyles.subtitle}>للربح السريع</Text>
+      
+      <TextInput
+        style={loginStyles.input}
+        placeholder="البريد الإلكتروني"
+        placeholderTextColor="#999"
+        value={email}
+        onChangeText={setEmail}
+        keyboardType="email-address"
+        autoCapitalize="none"
+      />
+      
+      <TextInput
+        style={loginStyles.input}
+        placeholder="كلمة المرور"
+        placeholderTextColor="#999"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+      />
+      
+      <TouchableOpacity style={loginStyles.button} onPress={handleLogin}>
+        <Text style={loginStyles.buttonText}>دخول</Text>
+      </TouchableOpacity>
+      
+      <TouchableOpacity style={loginStyles.registerButton}>
+        <Text style={loginStyles.registerText}>ليس لديك حساب؟ سجل الآن</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
 
-To build your app, run the following command:
+const loginStyles = StyleSheet.create({
+  container: { flex: 1, justifyContent: 'center', padding: 20, backgroundColor: '#1a1a1a' },
+  title: { fontSize: 36, fontWeight: 'bold', textAlign: 'center', color: '#FFD700', marginBottom: 10 },
+  subtitle: { fontSize: 18, textAlign: 'center', color: '#fff', marginBottom: 40 },
+  input: { backgroundColor: '#fff', padding: 15, borderRadius: 10, marginBottom: 15, fontSize: 16 },
+  button: { backgroundColor: '#007AFF', padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 10 },
+  buttonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  registerButton: { marginTop: 20, alignItems: 'center' },
+  registerText: { color: '#007AFF', fontSize: 16 }
+});
 
-<Terminal cmd={['$ eas build --platform all']} />
+// شاشة اللعبة الرئيسية
+const GameScreen = ({ navigation }) => {
+  const [balance, setBalance] = useState(0);
+  const [betAmount, setBetAmount] = useState('10');
+  const [isSpinning, setIsSpinning] = useState(false);
+  const [slotResult, setSlotResult] = useState(['🍒', '🍒', '🍒']);
+  const [lastWin, setLastWin] = useState(0);
 
-This command sends your project to EAS Build and produces installable binaries for Android and iOS. You can also build for one platform at a time by passing in `--platform android` or `--platform ios` as desired. For complete setup instructions, see [Create your first build](/build/setup/).
+  useEffect(() => {
+    loadBalance();
+  }, []);
 
-## Key features
+  const loadBalance = async () => {
+    const data = await AsyncStorage.getItem('user_data');
+    if (data) setBalance(JSON.parse(data).coinBalance || 1000);
+  };
 
-- Cloud builds for Android and iOS with consistent environments
-- Automatically provision and manage app signing credentials or use your own
-- Share [internal distribution](/build/internal-distribution/) builds with a URL
-- Automate builds with [build profiles](/build/eas-json/#build-profiles) in **eas.json** (named sets of build settings) and integrations with [EAS Workflows](/eas/workflows/get-started/) or [CI pipelines](/build/building-on-ci/)
-- Auto-submit successful builds to app stores via [`--auto-submit`](/build/automate-submissions/) and EAS Submit
-- First-class [`expo-updates` integration](/build/updates/) with per-profile channels and [runtime version](/eas-update/runtime-versions/) guidance
-- Reuse [development builds](/develop/development-builds/introduction/) across your team. When two team members run `eas build:dev` and the project fingerprint matches, the existing build is downloaded from EAS instead of creating a new one
-- Faster builds via [dependency caching and custom cache paths](/build-reference/caching/)
-- Install builds and updates on devices with [Expo Orbit](https://expo.dev/orbit)
+  const updateBalance = async (newBalance) => {
+    setBalance(newBalance);
+    const data = await AsyncStorage.getItem('user_data');
+    if (data) {
+      const user = JSON.parse(data);
+      user.coinBalance = newBalance;
+      await AsyncStorage.setItem('user_data', JSON.stringify(user));
+    }
+  };
 
-## When to use EAS Build
+  const calculateResult = (bet) => {
+    const symbols = ['🍒', '🍋', '🍊', '7️⃣', '💎', '🔔', '⭐'];
+    const result = [
+      symbols[Math.floor(Math.random() * symbols.length)],
+      symbols[Math.floor(Math.random() * symbols.length)],
+      symbols[Math.floor(Math.random() * symbols.length)]
+    ];
+    
+    let multiplier = 0;
+    if (result[0] === result[1] && result[1] === result[2]) {
+      switch(result[0]) {
+        case '7️⃣': multiplier = 50; break;
+        case '💎': multiplier = 30; break;
+        case '⭐': multiplier = 20; break;
+        case '🔔': multiplier = 15; break;
+        default: multiplier = 10;
+      }
+    } else if (result[0] === result[1] || result[1] === result[2] || result[0] === result[2]) {
+      multiplier = 2;
+    }
+    
+    return { result, win: bet * multiplier, multiplier };
+  };
 
-| Scenario                                                                             | Recommendation |
-| ------------------------------------------------------------------------------------ | -------------- |
-| Build production-ready binaries for app stores                                       | <YesIcon />    |
-| Share builds with testers via [internal distribution](/build/internal-distribution/) | <YesIcon />    |
-| Consistent builds across team members without local environment setup                | <YesIcon />    |
-| Automate builds from CI or [EAS Workflows](/eas/workflows/get-started/)              | <YesIcon />    |
-| Managed app signing credentials                                                      | <YesIcon />    |
-| Debugging native code locally                                                        | <NoIcon />     |
+  const handleSpin = () => {
+    const betValue = parseInt(betAmount) || 0;
+    
+    if (betValue < 1 || betValue > 10000) {
+      Alert.alert('خطأ', 'مبلغ الرهان يجب أن يكون بين 1 و 10000');
+      return;
+    }
+    
+    if (balance < betValue) {
+      Alert.alert('رصيد غير كافي', 'قم بإيداع كوين للمتابعة');
+      return;
+    }
 
-## Frequently asked questions
+    setIsSpinning(true);
+    setLastWin(0);
 
-<FAQ>
+    setTimeout(() => {
+      const { result, win } = calculateResult(betValue);
+      const newBalance = balance - betValue + win;
+      
+      setSlotResult(result);
+      setLastWin(win);
+      updateBalance(newBalance);
+      setIsSpinning(false);
+      
+      if (win > 0) {
+        Alert.alert('🎉 فوز!', `لقد ربحت ${win} كوين!`);
+      }
+    }, 1500);
+  };
 
-<Collapsible summary="How do I share builds with my team before submitting to app stores?">
+  const handleCollect = () => {
+    Alert.alert('تم', 'تم إضافة الأرباح إلى رصيدك');
+  };
 
-Use [internal distribution](/build/internal-distribution/) to share builds with a URL. Set `"distribution": "internal"` in your [build profile](/build/eas-json/#build-profiles) in **eas.json** to generate installable Android Package (APK) files for Android or [ad hoc builds](/build/internal-distribution/) for iOS.
+  return (
+    <View style={gameStyles.container}>
+      <View style={gameStyles.balanceContainer}>
+        <Text style={gameStyles.balanceText}>💰 {balance.toLocaleString()} كوين</Text>
+      </View>
 
-</Collapsible>
+      <View style={gameStyles.gameContainer}>
+        <SlotMachine result={slotResult} isSpinning={isSpinning} />
+      </View>
 
-<Collapsible summary="Can I use EAS Build with existing React Native projects?">
+      {lastWin > 0 && !isSpinning && (
+        <View style={gameStyles.winContainer}>
+          <Text style={gameStyles.winText}>+{lastWin} كوين!</Text>
+        </View>
+      )}
 
-Yes. EAS Build works with existing React Native projects created with `npx react-native init` or similar tools. See [Overview of using Expo with existing React Native apps](/bare/overview/) for more information.
+      <View style={gameStyles.betContainer}>
+        <Text style={gameStyles.betLabel}>مبلغ الرهان:</Text>
+        <View style={gameStyles.betInputContainer}>
+          <TextInput
+            style={gameStyles.betInput}
+            value={betAmount}
+            onChangeText={setBetAmount}
+            keyboardType="numeric"
+            maxLength={5}
+            editable={!isSpinning}
+          />
+          <Text style={gameStyles.betUnit}>كوين</Text>
+        </View>
+        <Text style={gameStyles.betRange}>من 1 إلى 10000</Text>
+      </View>
 
-</Collapsible>
+      <View style={gameStyles.buttonsContainer}>
+        <TouchableOpacity 
+          style={[gameStyles.button, gameStyles.collectButton]} 
+          onPress={handleCollect}
+          disabled={isSpinning}>
+          <Text style={gameStyles.buttonText}>💰 اسحب</Text>
+        </TouchableOpacity>
 
-<Collapsible summary="Does EAS Build handle app signing credentials?">
+        <TouchableOpacity 
+          style={[gameStyles.button, gameStyles.spinButton]} 
+          onPress={handleSpin}
+          disabled={isSpinning}>
+          <Text style={gameStyles.buttonText}>
+            {isSpinning ? '🔄 جاري...' : '🎰 العب'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+};
 
-Yes. EAS Build can generate and manage Android [keystores](/app-signing/app-credentials/#android), iOS [provisioning profiles](/app-signing/app-credentials/#ios) and [distribution certificates](/app-signing/app-credentials/#ios), or use credentials you provide. See [App signing credentials](/app-signing/app-credentials/) for more information.
+const gameStyles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#1a1a1a' },
+  balanceContainer: { position: 'absolute', top: 10, left: 20, right: 20, alignItems: 'center', zIndex: 10, backgroundColor: 'rgba(0,0,0,0.5)', padding: 10, borderRadius: 20 },
+  balanceText: { color: '#FFD700', fontSize: 22, fontWeight: 'bold' },
+  gameContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', marginTop: 40 },
+  winContainer: { position: 'absolute', top: height * 0.3, left: 0, right: 0, alignItems: 'center' },
+  winText: { color: '#4CAF50', fontSize: 40, fontWeight: 'bold', textShadowColor: '#000', textShadowOffset: { width: 2, height: 2 }, textShadowRadius: 5 },
+  betContainer: { padding: 20, alignItems: 'center' },
+  betLabel: { color: '#fff', fontSize: 16, marginBottom: 10 },
+  betInputContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#333', borderRadius: 10, paddingHorizontal: 15 },
+  betInput: { color: '#fff', fontSize: 20, padding: 10, width: 100, textAlign: 'center' },
+  betUnit: { color: '#FFD700', fontSize: 16 },
+  betRange: { color: '#999', fontSize: 12, marginTop: 5 },
+  buttonsContainer: { flexDirection: 'row', justifyContent: 'space-around', padding: 20, backgroundColor: '#2a2a2a' },
+  button: { paddingVertical: 15, paddingHorizontal: 40, borderRadius: 25, minWidth: 140, alignItems: 'center' },
+  spinButton: { backgroundColor: '#4CAF50' },
+  collectButton: { backgroundColor: '#FF9800' },
+  buttonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' }
+});
 
-</Collapsible>
+// شاشة الإيداع
+const DepositScreen = () => {
+  const [amount, setAmount] = useState('');
+  const [senderNumber, setSenderNumber] = useState('');
+  const [loading, setLoading] = useState(false);
+  
+  const phoneNumber = '01010525513';
 
-<Collapsible summary="Can I run builds locally instead of in the cloud?">
+  const copyToClipboard = async () => {
+    await Clipboard.setStringAsync(phoneNumber);
+    Alert.alert('تم النسخ', 'تم نسخ رقم الهاتف');
+  };
 
-Yes. Use [local builds](/build-reference/local-builds/) with `eas build --local` to run builds on your machine. This is useful for debugging or for security policies that require local builds.
+  const handleDeposit = async () => {
+    if (!amount || !senderNumber) {
+      Alert.alert('خطأ', 'الرجاء إدخال المبلغ ورقم المرسل');
+      return;
+    }
 
-</Collapsible>
+    setLoading(true);
+    setTimeout(() => {
+      Alert.alert('تم الاستلام', 'تم إرسال طلب الإيداع للمراجعة');
+      setAmount('');
+      setSenderNumber('');
+      setLoading(false);
+    }, 1500);
+  };
 
-<Collapsible summary="Can I use EAS Build with EAS Workflows or CI pipelines?">
+  return (
+    <ScrollView style={depositStyles.container}>
+      <View style={depositStyles.card}>
+        <Text style={depositStyles.title}>📥 إيداع كوين</Text>
+        
+        <Text style={depositStyles.label}>رقم الإيداع (للتحويل):</Text>
+        <View style={depositStyles.phoneContainer}>
+          <Text style={depositStyles.phoneNumber}>{phoneNumber}</Text>
+          <TouchableOpacity onPress={copyToClipboard} style={depositStyles.copyButton}>
+            <Text style={depositStyles.copyText}>نسخ</Text>
+          </TouchableOpacity>
+        </View>
 
-Yes. EAS Build integrates with [EAS Workflows](/eas/workflows/get-started/) using the `build` job type. Add a build job to your workflow configuration, for example:
+        <Text style={depositStyles.label}>كمية الكوين المراد إيداعها:</Text>
+        <TextInput
+          style={depositStyles.input}
+          value={amount}
+          onChangeText={setAmount}
+          keyboardType="numeric"
+          placeholder="مثال: 1000"
+          placeholderTextColor="#999"
+        />
 
-```yaml
-jobs:
-  build_ios:
-    type: build
-    params:
-      platform: ios
-```
+        <Text style={depositStyles.label}>رقم الشخص الذي أرسل الإيداع:</Text>
+        <TextInput
+          style={depositStyles.input}
+          value={senderNumber}
+          onChangeText={setSenderNumber}
+          keyboardType="phone-pad"
+          placeholder="رقم الهاتف"
+          placeholderTextColor="#999"
+        />
 
-The build job supports builds for both platforms or conditional builds based on the branch:
+        <TouchableOpacity
+          style={[depositStyles.depositButton, loading && depositStyles.disabled]}
+          onPress={handleDeposit}
+          disabled={loading}>
+          <Text style={depositStyles.buttonText}>
+            {loading ? 'جاري الإرسال...' : 'إيداع'}
+          </Text>
+        </TouchableOpacity>
 
-```yaml
-jobs:
-  build:
-    type: build
-    params:
-      platform: all
-      profile: ${{ github.ref_name == 'main' && 'production' || 'preview' }}
-```
+        <Text style={depositStyles.note}>سيتم مراجعة طلبك خلال 24 ساعة</Text>
+      </View>
+    </ScrollView>
+  );
+};
 
-For more information and other usage examples, see the [EAS Workflows build job](/eas/workflows/pre-packaged-jobs#build).
+const depositStyles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#f5f5f5', padding: 20 },
+  card: { backgroundColor: '#fff', borderRadius: 15, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 5, elevation: 3 },
+  title: { fontSize: 26, fontWeight: 'bold', marginBottom: 20, textAlign: 'center', color: '#007AFF' },
+  label: { fontSize: 16, color: '#333', marginBottom: 5, marginTop: 15 },
+  phoneContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f0f0f0', borderRadius: 10, padding: 12 },
+  phoneNumber: { flex: 1, fontSize: 18, color: '#007AFF', fontWeight: 'bold' },
+  copyButton: { backgroundColor: '#007AFF', paddingHorizontal: 15, paddingVertical: 8, borderRadius: 8 },
+  copyText: { color: '#fff', fontWeight: 'bold' },
+  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, fontSize: 16, backgroundColor: '#fff' },
+  depositButton: { backgroundColor: '#4CAF50', padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 25 },
+  disabled: { opacity: 0.5 },
+  buttonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
+  note: { marginTop: 15, color: '#999', fontSize: 12, textAlign: 'center' }
+});
 
-EAS Build supports [builds from GitHub](/build/building-from-github/) and [building on CI](/build/building-on-ci/) with any provider.
+// شاشة السحب
+const WithdrawScreen = () => {
+  const [amount, setAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('paypal');
+  const [paymentEmail, setPaymentEmail] = useState('');
+  const [loading, setLoading] = useState(false);
 
-</Collapsible>
+  const handleWithdraw = () => {
+    if (!amount || !paymentEmail) {
+      Alert.alert('خطأ', 'الرجاء إدخال المبلغ والبريد الإلكتروني');
+      return;
+    }
 
-<Collapsible summary="What build server infrastructure does EAS Build use?">
+    if (parseInt(amount) < 1000) {
+      Alert.alert('خطأ', 'الحد الأدنى للسحب 1000 كوين');
+      return;
+    }
 
-Android builds run on Linux runners hosted in Google Cloud Platform, and iOS builds run on macOS runners hosted in Expo's macOS cloud. See [Build server infrastructure](/build-reference/infrastructure/).
+    setLoading(true);
+    setTimeout(() => {
+      Alert.alert('تم الاستلام', `تم إرسال طلب سحب ${amount} كوين للمراجعة`);
+      setAmount('');
+      setPaymentEmail('');
+      setLoading(false);
+    }, 1500);
+  };
 
-</Collapsible>
+  return (
+    <ScrollView style={withdrawStyles.container}>
+      <View style={withdrawStyles.card}>
+        <Text style={withdrawStyles.title}>📤 سحب كوين</Text>
+        
+        <Text style={withdrawStyles.label}>الحد الأدنى للسحب: 1000 كوين</Text>
+        
+        <Text style={withdrawStyles.label}>كمية الكوين المراد سحبها:</Text>
+        <TextInput
+          style={withdrawStyles.input}
+          value={amount}
+          onChangeText={setAmount}
+          keyboardType="numeric"
+          placeholder="مثال: 5000"
+          placeholderTextColor="#999"
+        />
 
-</FAQ>
+        <Text style={withdrawStyles.label}>طريقة الدفع:</Text>
+        <View style={withdrawStyles.methodsContainer}>
+          <TouchableOpacity
+            style={[withdrawStyles.method, paymentMethod === 'paypal' && withdrawStyles.methodActive]}
+            onPress={() => setPaymentMethod('paypal')}>
+            <Text style={paymentMethod === 'paypal' ? withdrawStyles.textActive : withdrawStyles.methodText}>PayPal</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[withdrawStyles.method, paymentMethod === 'bank' && withdrawStyles.methodActive]}
+            onPress={() => setPaymentMethod('bank')}>
+            <Text style={paymentMethod === 'bank' ? withdrawStyles.textActive : withdrawStyles.methodText}>تحويل بنكي</Text>
+          </TouchableOpacity>
+        </View>
 
-## Get started
+        <Text style={withdrawStyles.label}>البريد الإلكتروني للدفع:</Text>
+        <TextInput
+          style={withdrawStyles.input}
+          value={paymentEmail}
+          onChangeText={setPaymentEmail}
+          keyboardType="email-address"
+          placeholder="example@email.com"
+          placeholderTextColor="#999"
+          autoCapitalize="none"
+        />
 
-<BoxLink
-  title="Create your first build"
-  description="It should only take a few minutes in total to get up and running for iOS and/or Android."
-  href="/build/setup"
-  Icon={Cube01Icon}
-/>
+        <TouchableOpacity
+          style={[withdrawStyles.withdrawButton, loading && withdrawStyles.disabled]}
+          onPress={handleWithdraw}
+          disabled={loading}>
+          <Text style={withdrawStyles.buttonText}>
+            {loading ? 'جاري الإرسال...' : 'طلب السحب'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
+  );
+};
 
-<BoxLink
-  title="Share your apps with internal testers"
-  description="EAS Build can help share preview builds of your app with a single URL."
-  href="/build/internal-distribution"
-  Icon={Cube01Icon}
-/>
+const withdrawStyles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#f5f5f5', padding: 20 },
+  card: { backgroundColor: '#fff', borderRadius: 15, padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 5, elevation: 3 },
+  title: { fontSize: 26, fontWeight: 'bold', marginBottom: 20, textAlign: 'center', color: '#F44336' },
+  label: { fontSize: 16, color: '#333', marginBottom: 5, marginTop: 15 },
+  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, fontSize: 16, backgroundColor: '#fff' },
+  methodsContainer: { flexDirection: 'row', justifyContent: 'space-between', marginVertical: 10 },
+  method: { flex: 1, padding: 12, borderWidth: 1, borderColor: '#ddd', borderRadius: 10, marginHorizontal: 5, alignItems: 'center' },
+  methodActive: { backgroundColor: '#007AFF', borderColor: '#007AFF' },
+  methodText: { color: '#333' },
+  textActive: { color: '#fff' },
+  withdrawButton: { backgroundColor: '#F44336', padding: 15, borderRadius: 10, alignItems: 'center', marginTop: 25 },
+  disabled: { opacity: 0.5 },
+  buttonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' }
+});
 
-<BoxLink
-  title="Automate submissions"
-  description="Learn how EAS Build can take your successful builds and handle uploading them to app stores automatically."
-  href="/build/automate-submissions"
-  Icon={Cube01Icon}
-/>
+// شاشة المعلومات
+const InfoScreen = () => (
+  <View style={infoStyles.container}>
+    <Text style={infoStyles.title}>🎰 سلوتس كلاسيك</Text>
+    <Text style={infoStyles.text}>هذا البرنامج للربح السريع</Text>
+    <Text style={infoStyles.text}>🚀 العب واربح الكوينات</Text>
+    <Text style={infoStyles.text}>💰 اسحب أرباحك بسهولة</Text>
+    <Text style={infoStyles.warning}>⚠️ العب بمسؤولية</Text>
+    <Text style={infoStyles.version}>الإصدار 1.0.0</Text>
+  </View>
+);
 
-<BoxLink
-  title="App version management"
-  description="Automate version bumps so you never have to think about them again."
-  href="/build-reference/app-versions"
-  Icon={Cube01Icon}
-/>
+const infoStyles = StyleSheet.create({
+  container: { flex: 1, padding: 30, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center' },
+  title: { fontSize: 36, fontWeight: 'bold', color: '#007AFF', marginBottom: 30, textAlign: 'center' },
+  text: { fontSize: 20, color: '#333', marginVertical: 10, textAlign: 'center' },
+  warning: { fontSize: 16, color: '#F44336', marginTop: 40, fontStyle: 'italic', textAlign: 'center' },
+  version: { fontSize: 14, color: '#999', marginTop: 20 }
+});
 
-<BoxLink
-  title="Run builds locally or on your own infrastructure"
-  description="EAS Build is a hosted service, and it can also run on your own machine, for example, to debug or to comply with company security policies."
-  href="/build-reference/local-builds"
-  Icon={Cube01Icon}
-/>
+// شاشة الإعدادات
+const SettingsScreen = () => {
+  const [notifications, setNotifications] = useState(true);
+  
+  return (
+    <View style={settingsStyles.container}>
+      <Text style={settingsStyles.title}>⚙️ الإعدادات</Text>
+      
+      <TouchableOpacity style={settingsStyles.item}>
+        <Text style={settingsStyles.itemText}>اللغة: العربية</Text>
+        <Text style={settingsStyles.itemArrow}>✓</Text>
+      </TouchableOpacity>
+      
+      <TouchableOpacity 
+        style={settingsStyles.item}
+        onPress={() => {
+          setNotifications(!notifications);
+          Alert.alert('تم', notifications ? 'تم تعطيل الإشعارات' : 'تم تفعيل الإشعارات');
+        }}>
+        <Text style={settingsStyles.itemText}>الإشعارات: {notifications ? 'مفعلة' : 'معطلة'}</Text>
+        <Text style={settingsStyles.itemArrow}>{notifications ? '✓' : '✗'}</Text>
+      </TouchableOpacity>
+      
+      <TouchableOpacity style={settingsStyles.item}>
+        <Text style={settingsStyles.itemText}>حول التطبيق</Text>
+        <Text style={settingsStyles.itemArrow}>→</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
 
-<BoxLink
-  title="Limitations"
-  description="EAS Build is new and rapidly evolving, so we recommend getting familiar with the current limitations."
-  href="/build-reference/limitations"
-  Icon={Cube01Icon}
-/>
+const settingsStyles = StyleSheet.create({
+  container: { flex: 1, padding: 20, backgroundColor: '#f5f5f5' },
+  title: { fontSize: 30, fontWeight: 'bold', marginBottom: 30, color: '#333', textAlign: 'center' },
+  item: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#fff', padding: 18, borderRadius: 12, marginBottom: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 2 },
+  itemText: { fontSize: 16, color: '#333' },
+  itemArrow: { fontSize: 18, color: '#007AFF' }
+});
+
+// القائمة الجانبية المخصصة
+const CustomDrawerContent = ({ navigation }) => {
+  const [balance, setBalance] = useState(0);
+
+  useEffect(() => {
+    loadBalance();
+  }, []);
+
+  const loadBalance = async () => {
+    const data = await AsyncStorage.getItem('user_data');
+    if (data) setBalance(JSON.parse(data).coinBalance || 0);
+  };
+
+  const handleLogout = async () => {
+    Alert.alert('تسجيل الخروج', 'هل أنت متأكد؟', [
+      { text: 'إلغاء', style: 'cancel' },
+      {
+        text: 'خروج',
+        style: 'destructive',
+        onPress: async () => {
+          await AsyncStorage.multiRemove(['access_token', 'user_data']);
+          navigation.replace('Login');
+        }
+      }
+    ]);
+  };
+
+  const menuItems = [
+    { icon: '🎰', label: 'اللعبة', screen: 'Game' },
+    { icon: '📥', label: 'الإيداع', screen: 'Deposit' },
+    { icon: '📤', label: 'السحب', screen: 'Withdraw' },
+    { icon: '⚙️', label: 'الإعدادات', screen: 'Settings' },
+    { icon: 'ℹ️', label: 'معلومات', screen: 'Info' },
+    { icon: '🚪', label: 'خروج', action: 'logout' },
+  ];
+
+  return (
+    <View style={drawerStyles.container}>
+      <View style={drawerStyles.header}>
+        <Text style={drawerStyles.welcome}>مرحباً</Text>
+        <Text style={drawerStyles.balance}>{balance.toLocaleString()}</Text>
+        <Text style={drawerStyles.balanceUnit}>كوين</Text>
+      </View>
+      {menuItems.map((item, i) => (
+        <TouchableOpacity
+          key={i}
+          style={drawerStyles.item}
+          onPress={() => item.action === 'logout' ? handleLogout() : navigation.navigate(item.screen)}>
+          <Text style={drawerStyles.icon}>{item.icon}</Text>
+          <Text style={drawerStyles.label}>{item.label}</Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+};
+
+const drawerStyles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#fff' },
+  header: { backgroundColor: '#007AFF', padding: 25, alignItems: 'center' },
+  welcome: { color: '#fff', fontSize: 16, marginBottom: 10 },
+  balance: { color: '#FFD700', fontSize: 36, fontWeight: 'bold' },
+  balanceUnit: { color: '#fff', fontSize: 14, marginTop: 5 },
+  item: { flexDirection: 'row', padding: 18, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
+  icon: { fontSize: 24, width: 45 },
+  label: { fontSize: 16 }
+});
+
+// التنقل الرئيسي
+const MainDrawer = () => (
+  <Drawer.Navigator
+    drawerContent={props => <CustomDrawerContent {...props} />}
+    screenOptions={{
+      headerStyle: { backgroundColor: '#007AFF' },
+      headerTintColor: '#fff',
+      drawerPosition: 'right',
+    }}>
+    <Drawer.Screen name="Game" component={GameScreen} options={{ title: '🎰 سلوتس' }} />
+    <Drawer.Screen name="Deposit" component={DepositScreen} options={{ title: '📥 إيداع' }} />
+    <Drawer.Screen name="Withdraw" component={WithdrawScreen} options={{ title: '📤 سحب' }} />
+    <Drawer.Screen name="Settings" component={SettingsScreen} options={{ title: '⚙️ إعدادات' }} />
+    <Drawer.Screen name="Info" component={InfoScreen} options={{ title: 'ℹ️ معلومات' }} />
+  </Drawer.Navigator>
+);
+
+// التطبيق الرئيسي
+export default function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    checkLogin();
+  }, []);
+
+  const checkLogin = async () => {
+    const token = await AsyncStorage.getItem('access_token');
+    setIsLoggedIn(!!token);
+    setIsLoading(false);
+  };
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#1a1a1a' }}>
+        <Text style={{ color: '#FFD700', fontSize: 20 }}>جاري التحميل...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <NavigationContainer>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
+        {isLoggedIn ? (
+          <Stack.Screen name="Main" component={MainDrawer} />
+        ) : (
+          <Stack.Screen name="Login" component={LoginScreen} />
+        )}
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
